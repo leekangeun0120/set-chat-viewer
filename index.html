@@ -52,6 +52,11 @@
   .row.me .bubble { background: var(--me); }
   .bubble.intro { background: #eef3f7; font-size: 13px; color: var(--sub); }
   .time { font-size: 11px; color: var(--sub); white-space: nowrap; }
+  .bubble.typing { color: var(--sub); }
+  .dots span { animation: blink 1.2s infinite; }
+  .dots span:nth-child(2) { animation-delay: .2s; }
+  .dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
   footer {
     display: flex; gap: 8px; padding: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom));
     background: #fff; border-top: 1px solid var(--line);
@@ -203,6 +208,24 @@ function render(issue, comments) {
     row.append(col);
     chat.append(row);
   }
+  // 마지막 메시지에 👀 반응이 달려 있으면 = 클로드코드가 읽고 답을 쓰는 중
+  if (comments.at(-1)?.reactions?.eyes > 0) {
+    const who = "클로드코드";
+    const row = el("div", "row");
+    const av = el("div", "avatar", who.slice(0, 1));
+    av.style.background = MEMBERS[who].color;
+    const col = el("div");
+    col.append(el("div", "who", who));
+    const bubble = el("div", "bubble typing", "👀 확인 중");
+    const dots = el("span", "dots");
+    for (let i = 0; i < 3; i++) dots.append(el("span", null, "."));
+    bubble.append(dots);
+    const line = el("div", "line");
+    line.append(bubble);
+    col.append(line);
+    row.append(av, col);
+    chat.append(row);
+  }
   if (atBottom || !lastSig) chat.scrollTop = chat.scrollHeight;
 }
 
@@ -229,7 +252,7 @@ async function loadChat() {
     gh(`/repos/${cfg.repo}/issues/${n}`),
     ghAll(`/repos/${cfg.repo}/issues/${n}/comments`),
   ]);
-  const sig = n + ":" + comments.length + ":" + (comments.at(-1)?.updated_at || "");
+  const sig = n + ":" + comments.length + ":" + (comments.at(-1)?.updated_at || "") + ":" + (comments.at(-1)?.reactions?.eyes || 0);
   if (sig !== lastSig) { render(issue, comments); lastSig = sig; }
   status("");
 }
