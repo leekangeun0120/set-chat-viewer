@@ -115,7 +115,7 @@ const MEMBERS = {
   "피클":     { color: "#6aa84f" },
 };
 const TAG = /^\s*\*{0,2}\[(강은|클로드코드|피클)\]\*{0,2}\s*\n?/;
-const POLL_MS = 20000;
+const POLL_MS = 10000;
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -129,6 +129,7 @@ function status(t) { $("status").textContent = t || ""; }
 
 async function gh(path, opts = {}) {
   const res = await fetch("https://api.github.com" + path, {
+    cache: "no-store",
     ...opts,
     headers: {
       "Accept": "application/vnd.github+json",
