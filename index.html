@@ -53,6 +53,7 @@
   .bubble.intro { background: #eef3f7; font-size: 13px; color: var(--sub); }
   .time { font-size: 11px; color: var(--sub); white-space: nowrap; }
   .bubble.typing { color: var(--sub); }
+  .bubble.summary { background: #fffbe6; border: 1px solid #f0d878; max-width: min(84vw, 480px); }
   .dots span { animation: blink 1.2s infinite; }
   .dots span:nth-child(2) { animation-delay: .2s; }
   .dots span:nth-child(3) { animation-delay: .4s; }
@@ -86,6 +87,7 @@
 <body>
 <header>
   <select id="room" aria-label="방 고르기"><option>방 불러오는 중…</option></select>
+  <button id="toSummary" title="최근 요약 보기" aria-label="최근 요약 보기">📌</button>
   <button id="refresh" title="새로고침" aria-label="새로고침">↻</button>
   <button id="openSettings" title="설정" aria-label="설정">⚙️</button>
 </header>
@@ -202,7 +204,8 @@ function render(issue, comments) {
     const col = el("div");
     if (!mine) col.append(el("div", "who", who));
     const line = el("div", "line");
-    line.append(el("div", "bubble" + (it.intro ? " intro" : ""), it.text || "(빈 메시지)"));
+    const isSummary = it.who === "클로드코드" && it.text.startsWith("📌");
+    line.append(el("div", "bubble" + (it.intro ? " intro" : "") + (isSummary ? " summary" : ""), it.text || "(빈 메시지)"));
     line.append(el("span", "time", timeFmt.format(d)));
     col.append(line);
     row.append(col);
@@ -290,6 +293,13 @@ async function send() {
 $("room").addEventListener("change", () => { store.set("room", $("room").value); lastSig = ""; refresh(false); });
 $("refresh").addEventListener("click", () => { lastSig = ""; refresh(true); });
 $("send").addEventListener("click", send);
+// 📌 = 가장 최근 요약으로 이동. 요약이 없으면 만드는 법을 알려 준다.
+$("toSummary").addEventListener("click", () => {
+  const last = [...document.querySelectorAll(".bubble.summary")].at(-1);
+  if (last) { last.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  status("아직 요약이 없어요 — \"요약해줘\"라고 보내면 클로드코드가 정리해 줘요");
+  setTimeout(() => status(""), 5000);
+});
 // 엔터 = 전송, Shift+엔터 = 줄바꿈. 한글 조합 중 엔터도 한 번에 전송되게 조합이 끝난 뒤 보낸다.
 let sendAfterCompose = false;
 $("msg").addEventListener("keydown", e => {
