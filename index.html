@@ -53,6 +53,12 @@
   .bubble.intro { background: #eef3f7; font-size: 13px; color: var(--sub); }
   .time { font-size: 11px; color: var(--sub); white-space: nowrap; }
   .bubble.typing { color: var(--sub); }
+  .bubble a { color: #1a5fb4; word-break: break-all; }
+  #searchBar { display: none; gap: 8px; align-items: center; padding: 6px 12px; background: var(--bar); border-bottom: 1px solid var(--line); }
+  #searchBar.on { display: flex; }
+  #searchBar input { flex: 1; min-width: 0; font-size: 15px; padding: 7px 9px; border: 1px solid #ccd; border-radius: 8px; }
+  #searchCount { font-size: 12px; color: var(--sub); white-space: nowrap; }
+  .empty { text-align: center; color: var(--sub); font-size: 13px; margin-top: 24px; }
   .bubble.summary { background: #fffbe6; border: 1px solid #f0d878; max-width: min(84vw, 480px); }
   .dots span { animation: blink 1.2s infinite; }
   .dots span:nth-child(2) { animation-delay: .2s; }
@@ -87,10 +93,16 @@
 <body>
 <header>
   <select id="room" aria-label="방 고르기"><option>방 불러오는 중…</option></select>
+  <button id="newRoom" title="새 방 만들기" aria-label="새 방 만들기">➕</button>
+  <button id="openSearch" title="이 방에서 찾기" aria-label="이 방에서 찾기">🔍</button>
   <button id="toSummary" title="최근 요약 보기" aria-label="최근 요약 보기">📌</button>
   <button id="refresh" title="새로고침" aria-label="새로고침">↻</button>
   <button id="openSettings" title="설정" aria-label="설정">⚙️</button>
 </header>
+<div id="searchBar">
+  <input id="q" type="search" placeholder="이 방에서 찾기 (예: 결혼식)" autocomplete="off">
+  <span id="searchCount"></span>
+</div>
 <div id="status"></div>
 <main id="chat"></main>
 <footer>
@@ -112,6 +124,22 @@
   <div class="actions">
     <button id="cancel">닫기</button>
     <button id="save" class="ok">저장</button>
+  </div>
+</dialog>
+
+<dialog id="roomDlg">
+  <h2>새 방 만들기</h2>
+  <label for="roomName">방 주제</label>
+  <input id="roomName" placeholder="예: 12월 일정" maxlength="40" autocomplete="off">
+  <label for="roomKind">종류</label>
+  <select id="roomKind">
+    <option value="단톡방">단톡방 — 클로드코드가 답해요</option>
+    <option value="블로그">블로그 원고 방 — 자동 답장 없음</option>
+  </select>
+  <p id="roomErr"></p>
+  <div class="actions">
+    <button id="roomCancel">닫기</button>
+    <button id="roomCreate" class="ok">만들기</button>
   </div>
 </dialog>
 
@@ -176,7 +204,22 @@ function el(tag, cls, text) {
   return e;
 }
 
+// 글 안의 주소(http…)는 눌러서 열 수 있게 링크로 만든다. 나머지는 글자 그대로.
+function fillText(node, text) {
+  const parts = text.split(/(https?:\/\/[^\s<>()]+)/g);
+  parts.forEach((part, i) => {
+    if (i % 2 === 0) { if (part) node.append(part); return; }
+    const a = el("a", null, part);
+    a.href = part; a.target = "_blank"; a.rel = "noopener noreferrer";
+    node.append(a);
+  });
+}
+
+let query = "";
+let shown = null;   // 마지막으로 그린 { issue, comments } — 검색어가 바뀌면 다시 그린다
+
 function render(issue, comments) {
+  shown = { issue, comments };
   const chat = $("chat");
   const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
   chat.replaceChildren();
@@ -186,7 +229,12 @@ function render(issue, comments) {
   if (issue.body && issue.body.trim()) items.push({ ...parse(issue.body), at: issue.created_at, login: issue.user.login, intro: true });
   for (const c of comments) items.push({ ...parse(c.body), at: c.created_at, login: c.user.login });
 
-  for (const it of items) {
+  const q = query.toLowerCase();
+  const list = q ? items.filter(it => (it.text + " " + (it.who || "")).toLowerCase().includes(q)) : items;
+  $("searchCount").textContent = q ? list.length + "개" : "";
+  if (q && !list.length) chat.append(el("div", "empty", "찾는 말이 이 방에 없어요"));
+
+  for (const it of list) {
     const d = new Date(it.at);
     const day = dayFmt.format(d);
     if (day !== lastDay) {
@@ -205,14 +253,16 @@ function render(issue, comments) {
     if (!mine) col.append(el("div", "who", who));
     const line = el("div", "line");
     const isSummary = it.who === "클로드코드" && it.text.startsWith("📌");
-    line.append(el("div", "bubble" + (it.intro ? " intro" : "") + (isSummary ? " summary" : ""), it.text || "(빈 메시지)"));
+    const bubble = el("div", "bubble" + (it.intro ? " intro" : "") + (isSummary ? " summary" : ""));
+    fillText(bubble, it.text || "(빈 메시지)");
+    line.append(bubble);
     line.append(el("span", "time", timeFmt.format(d)));
     col.append(line);
     row.append(col);
     chat.append(row);
   }
   // 마지막 메시지에 👀 반응이 달려 있으면 = 클로드코드가 읽고 답을 쓰는 중
-  if (comments.at(-1)?.reactions?.eyes > 0) {
+  if (!q && comments.at(-1)?.reactions?.eyes > 0) {
     const who = "클로드코드";
     const row = el("div", "row");
     const av = el("div", "avatar", who.slice(0, 1));
@@ -316,6 +366,50 @@ $("msg").addEventListener("compositionend", () => {
   if (!sendAfterCompose) return;
   sendAfterCompose = false;
   setTimeout(send, 0);
+});
+// 🔍 = 이 방에서 찾기. 다시 누르면 닫히고 전체 대화로 돌아온다.
+$("openSearch").addEventListener("click", () => {
+  const on = $("searchBar").classList.toggle("on");
+  if (on) { $("q").focus(); return; }
+  $("q").value = ""; query = "";
+  if (shown) { render(shown.issue, shown.comments); $("chat").scrollTop = $("chat").scrollHeight; }
+});
+$("q").addEventListener("input", () => {
+  query = $("q").value.trim();
+  if (shown) render(shown.issue, shown.comments);
+});
+// ➕ = 새 방(이슈) 만들기. 제목 규칙 "[단톡방] 주제"는 여기서 붙여 준다.
+$("newRoom").addEventListener("click", () => {
+  if (!cfg.repo || !cfg.token) { $("openSettings").click(); return; }
+  $("roomName").value = ""; $("roomErr").textContent = "";
+  $("roomDlg").showModal();
+  $("roomName").focus();
+});
+$("roomCancel").addEventListener("click", () => $("roomDlg").close());
+let creating = false;
+$("roomCreate").addEventListener("click", async () => {
+  if (creating) return;
+  const name = $("roomName").value.trim().replace(/^\[[^\]]*\]\s*/, "");
+  if (!name) { $("roomErr").textContent = "방 주제를 적어 주세요"; return; }
+  const kind = $("roomKind").value;
+  creating = true; $("roomCreate").disabled = true;
+  try {
+    const issue = await gh(`/repos/${cfg.repo}/issues`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: `[${kind}] ${name}`,
+        body: `**[${cfg.me}]**
+
+${name} 얘기하는 방이에요.`,
+      }),
+    });
+    $("roomDlg").close();
+    store.set("room", String(issue.number));
+    $("room").value = "";
+    lastSig = "";
+    await refresh(true);
+  } catch (e) { $("roomErr").textContent = "만들기 실패: " + e.message; }
+  $("roomCreate").disabled = false; creating = false;
 });
 $("openSettings").addEventListener("click", () => {
   $("repo").value = cfg.repo; $("token").value = cfg.token; $("me").value = cfg.me;
