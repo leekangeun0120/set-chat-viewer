@@ -208,12 +208,13 @@ function render(issue, comments) {
 
 async function loadRooms() {
   const issues = await ghAll(`/repos/${cfg.repo}/issues?state=all`);
-  const rooms = issues.filter(i => !i.pull_request && i.title.startsWith("[단톡방]"));
+  const rooms = issues.filter(i => !i.pull_request && /^\[(단톡방|블로그)\]/.test(i.title));
   const sel = $("room");
   const keep = sel.value || store.get("room");
   sel.replaceChildren();
   for (const r of rooms) {
-    const o = el("option", null, r.title.replace("[단톡방]", "").trim() + (r.state === "closed" ? " (닫힘)" : ""));
+    const label = r.title.startsWith("[블로그]") ? "📝 " + r.title.replace("[블로그]", "").trim() : r.title.replace("[단톡방]", "").trim();
+    const o = el("option", null, label + (r.state === "closed" ? " (닫힘)" : ""));
     o.value = r.number;
     sel.append(o);
   }
